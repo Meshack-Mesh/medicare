@@ -132,13 +132,7 @@ const LoginPage = () => {
               </p>
             </div>
 
-            {/* Demo Credentials */}
-            <div className="mt-4 p-3 bg-muted rounded-lg">
-              <p className="text-xs text-muted-foreground mb-2">Demo credentials:</p>
-              <p className="text-xs"><strong>Patient:</strong> patient@test.com / password123</p>
-              <p className="text-xs"><strong>Doctor:</strong> doctor@test.com / password123</p>
-            </div>
-          </CardContent>
+            </CardContent>
         </Card>
       </div>
     </div>

@@ -1,18 +1,35 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from '@/components/ui/avatar';
+
+import { Save, Camera, LogOut } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { Save, Camera, User } from 'lucide-react';
 
 const ProfileForm = () => {
-  const { user, updateProfile } = useAuth();
+  const { user, updateProfile, logout } = useAuth();
   const { toast } = useToast();
+
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState({
@@ -27,39 +44,53 @@ const ProfileForm = () => {
     profilePicture: user?.profilePicture || ''
   });
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast({ title: 'Invalid file', description: 'Please select an image file.', variant: 'destructive' });
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: 'Too large', description: 'Image must be under 5MB.', variant: 'destructive' });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setFormData(prev => ({ ...prev, profilePicture: reader.result as string }));
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
-
     try {
       const updateData: any = {
         name: formData.name,
         age: formData.age ? parseInt(formData.age) : undefined,
         gender: formData.gender || undefined,
-        medicalHistory: formData.medicalHistory || undefined,
-        profilePicture: formData.profilePicture || undefined
+        profilePicture: formData.profilePicture || undefined,
+        medicalHistory: formData.medicalHistory || undefined
       };
 
       if (user?.role === 'doctor') {
-        updateData.specialization = formData.specialization || undefined;
-        updateData.qualifications = formData.qualifications || undefined;
-        updateData.availability = formData.availability || undefined;
+        updateData.specialization = formData.specialization;
+        updateData.qualifications = formData.qualifications;
+        updateData.availability = formData.availability;
       }
 
-      updateProfile(updateData);
-      
-      toast({
-        title: "Success",
-        description: "Profile updated successfully!",
-      });
-      
+      await updateProfile(updateData);
+
+      toast({ title: 'Success', description: 'Profile updated successfully!' });
       setIsEditing(false);
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to update profile. Please try again.",
-        variant: "destructive"
-      });
+    } catch (err) {
+      toast({ title: 'Error', description: 'Failed to update profile.', variant: 'destructive' });
     } finally {
       setIsSaving(false);
     }
@@ -82,9 +113,15 @@ const ProfileForm = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold mb-2">Profile Settings</h2>
-        <p className="text-muted-foreground">Manage your personal information and preferences</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold mb-2">Profile Settings</h2>
+          <p className="text-muted-foreground">Manage your personal information and preferences</p>
+        </div>
+        <Button variant="destructive" onClick={logout}>
+          <LogOut className="w-4 h-4 mr-2" />
+          Logout
+        </Button>
       </div>
 
       <Card>
@@ -92,24 +129,18 @@ const ProfileForm = () => {
           <div className="flex items-center justify-between">
             <CardTitle>Personal Information</CardTitle>
             {!isEditing ? (
-              <Button onClick={() => setIsEditing(true)}>
-                Edit Profile
-              </Button>
+              <Button onClick={() => setIsEditing(true)}>Edit Profile</Button>
             ) : (
               <div className="space-x-2">
-                <Button variant="outline" onClick={handleCancel}>
-                  Cancel
-                </Button>
+                <Button variant="outline" onClick={handleCancel}>Cancel</Button>
                 <Button onClick={handleSubmit} disabled={isSaving}>
                   {isSaving ? (
                     <>
-                      <Save className="w-4 h-4 mr-2 animate-pulse" />
-                      Saving...
+                      <Save className="w-4 h-4 mr-2 animate-pulse" /> Saving...
                     </>
                   ) : (
                     <>
-                      <Save className="w-4 h-4 mr-2" />
-                      Save Changes
+                      <Save className="w-4 h-4 mr-2" /> Save Changes
                     </>
                   )}
                 </Button>
@@ -117,36 +148,47 @@ const ProfileForm = () => {
             )}
           </div>
         </CardHeader>
-        
+
         <CardContent className="space-y-6">
           {/* Profile Picture */}
           <div className="flex items-center space-x-4">
             <Avatar className="w-20 h-20">
               <AvatarImage src={formData.profilePicture} alt={formData.name} />
-              <AvatarFallback className="bg-primary text-primary-foreground text-lg">
-                {formData.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+              <AvatarFallback className="bg-primary text-white">
+                {formData.name?.charAt(0).toUpperCase()}
               </AvatarFallback>
             </Avatar>
             {isEditing && (
               <div className="space-y-2">
-                <Button variant="outline" size="sm">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                >
                   <Camera className="w-4 h-4 mr-2" />
                   Change Photo
                 </Button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handlePhotoChange}
+                />
                 <p className="text-xs text-muted-foreground">JPG, PNG or GIF (max. 5MB)</p>
               </div>
             )}
           </div>
 
+          {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Basic Information */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="name">Full Name</Label>
                 <Input
                   id="name"
                   value={formData.name}
-                  onChange={(e) => setFormData({...formData, name: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   disabled={!isEditing}
                   required
                 />
@@ -158,10 +200,9 @@ const ProfileForm = () => {
                   id="email"
                   type="email"
                   value={formData.email}
-                  disabled={true}
+                  disabled
                   className="bg-muted"
                 />
-                <p className="text-xs text-muted-foreground">Email cannot be changed</p>
               </div>
 
               <div className="space-y-2">
@@ -170,10 +211,8 @@ const ProfileForm = () => {
                   id="age"
                   type="number"
                   value={formData.age}
-                  onChange={(e) => setFormData({...formData, age: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, age: e.target.value })}
                   disabled={!isEditing}
-                  min="1"
-                  max="120"
                 />
               </div>
 
@@ -181,7 +220,7 @@ const ProfileForm = () => {
                 <Label htmlFor="gender">Gender</Label>
                 <Select
                   value={formData.gender}
-                  onValueChange={(value) => setFormData({...formData, gender: value})}
+                  onValueChange={(value) => setFormData({ ...formData, gender: value })}
                   disabled={!isEditing}
                 >
                   <SelectTrigger>
@@ -197,7 +236,7 @@ const ProfileForm = () => {
               </div>
             </div>
 
-            {/* Doctor-specific fields */}
+            {/* Doctor fields */}
             {user?.role === 'doctor' && (
               <>
                 <div className="space-y-2">
@@ -205,9 +244,8 @@ const ProfileForm = () => {
                   <Input
                     id="specialization"
                     value={formData.specialization}
-                    onChange={(e) => setFormData({...formData, specialization: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, specialization: e.target.value })}
                     disabled={!isEditing}
-                    placeholder="e.g., Cardiology, Neurology"
                   />
                 </div>
 
@@ -216,9 +254,8 @@ const ProfileForm = () => {
                   <Textarea
                     id="qualifications"
                     value={formData.qualifications}
-                    onChange={(e) => setFormData({...formData, qualifications: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, qualifications: e.target.value })}
                     disabled={!isEditing}
-                    placeholder="e.g., MD, PhD in Cardiology, Board Certified"
                     rows={3}
                   />
                 </div>
@@ -228,66 +265,27 @@ const ProfileForm = () => {
                   <Input
                     id="availability"
                     value={formData.availability}
-                    onChange={(e) => setFormData({...formData, availability: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, availability: e.target.value })}
                     disabled={!isEditing}
-                    placeholder="e.g., Monday-Friday 9AM-5PM"
                   />
                 </div>
               </>
             )}
 
-            {/* Patient-specific fields */}
+            {/* Patient fields */}
             {user?.role === 'patient' && (
               <div className="space-y-2">
                 <Label htmlFor="medicalHistory">Medical History</Label>
                 <Textarea
                   id="medicalHistory"
                   value={formData.medicalHistory}
-                  onChange={(e) => setFormData({...formData, medicalHistory: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, medicalHistory: e.target.value })}
                   disabled={!isEditing}
-                  placeholder="Brief description of relevant medical history, allergies, current medications, etc."
                   rows={4}
                 />
-                <p className="text-xs text-muted-foreground">
-                  This information helps doctors provide better advice
-                </p>
               </div>
             )}
           </form>
-        </CardContent>
-      </Card>
-
-      {/* Account Information */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Account Information</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between p-4 border rounded-lg">
-              <div>
-                <h4 className="font-medium">Account Type</h4>
-                <p className="text-sm text-muted-foreground">
-                  You are registered as a {user?.role}
-                </p>
-              </div>
-              <div className="px-3 py-1 bg-primary/10 text-primary rounded-full text-sm font-medium capitalize">
-                {user?.role}
-              </div>
-            </div>
-            
-            <div className="flex items-center justify-between p-4 border rounded-lg">
-              <div>
-                <h4 className="font-medium">Account Security</h4>
-                <p className="text-sm text-muted-foreground">
-                  Manage your password and security settings
-                </p>
-              </div>
-              <Button variant="outline">
-                Change Password
-              </Button>
-            </div>
-          </div>
         </CardContent>
       </Card>
     </div>
