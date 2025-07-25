@@ -19,8 +19,13 @@ export const register = async (req, res) => {
       role,
     });
 
-   const { password, ...userWithoutPassword } = savedUser._doc;
-   res.status(201).json({ message: "Registration successful", user: userWithoutPassword });
+    // Remove password from response
+    const { password: _, ...userWithoutPassword } = newUser._doc;
+
+    res.status(201).json({
+      message: "Registration successful",
+      user: userWithoutPassword,
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -38,11 +43,15 @@ export const login = async (req, res) => {
     if (!isMatch)
       return res.status(400).json({ message: "Invalid credentials" });
 
-    const token = jwt.sign({ userId: user._id, role: user.role }, process.env.JWT_SECRET, {
-      expiresIn: "1d"
-    });
+    const token = jwt.sign(
+      { userId: user._id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: "1d" }
+    );
 
-    res.status(200).json({ token, user });
+    const { password: _, ...userWithoutPassword } = user._doc;
+
+    res.status(200).json({ token, user: userWithoutPassword });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
