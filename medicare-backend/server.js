@@ -15,7 +15,7 @@ const PORT = process.env.PORT || 5000;
 app.use(cors({
   origin: [
     "http://localhost:5173", // local dev
-    "https://medicare-e91ar6j53-meshack-meshs-projects.vercel.app/"
+    "https://medicare-e91ar6j53-meshack-meshs-projects.vercel.app"
   ],
   credentials: true
 }));
