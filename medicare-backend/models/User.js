@@ -11,6 +11,12 @@ const userSchema = new mongoose.Schema({
     default: "patient",
     required: true,
   },
+  specialization: { type: String },
+  qualifications: { type: String },
+  createdAt: {
+    type: Date,
+    default: Date.now,
+  },
 });
 
 const User = mongoose.model('User', userSchema);

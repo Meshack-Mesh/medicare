@@ -5,6 +5,11 @@ import User from "../models/User.js";
 export const register = async (req, res) => {
   const { name, email, password, role } = req.body;
 
+  // Validation
+  if (!name || !email || !password || !role) {
+    return res.status(400).json({ message: "All fields are required" });
+  }
+
   try {
     const existingUser = await User.findOne({ email });
     if (existingUser)
@@ -34,10 +39,20 @@ export const register = async (req, res) => {
 export const login = async (req, res) => {
   const { email, password, role } = req.body;
 
+  // Validation
+  if (!email || !password) {
+    return res.status(400).json({ message: "Email and password are required" });
+  }
+
   try {
     const user = await User.findOne({ email });
-    if (!user || user.role !== role)
+    if (!user)
       return res.status(400).json({ message: "Invalid credentials" });
+
+    // Check if role matches (if provided)
+    if (role && user.role !== role) {
+      return res.status(400).json({ message: "Invalid credentials" });
+    }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch)

@@ -1,4 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import axios from 'axios';
+
+// Configure axios base URL
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+axios.defaults.baseURL = API_BASE_URL;
 
 export interface User {
   id: string;
@@ -56,24 +61,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (email: string, password: string): Promise<boolean> => {
     setIsLoading(true);
     try {
-      // Simulate API call - replace with actual backend integration
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Mock user data - replace with actual API response
-      const mockUser: User = {
-        id: '1',
-        name: email === 'doctor@test.com' ? 'Dr. Sarah Johnson' : 'John Doe',
+      // Make API call to backend
+      const response = await axios.post('/api/auth/login', {
         email,
-        role: email === 'doctor@test.com' ? 'doctor' : 'patient',
-        specialization: email === 'doctor@test.com' ? 'Cardiology' : undefined,
-        qualifications: email === 'doctor@test.com' ? 'MD, PhD in Cardiology' : undefined,
-      };
+        password,
+        role: email === 'doctor@test.com' ? 'doctor' : 'patient' // Determine role based on email for now
+      });
 
-      setUser(mockUser);
-      localStorage.setItem('medicalPlatformUser', JSON.stringify(mockUser));
-      return true;
+      if (response.data && response.data.user) {
+        const user: User = {
+          id: response.data.user._id,
+          name: response.data.user.name,
+          email: response.data.user.email,
+          role: response.data.user.role,
+          specialization: response.data.user.specialization,
+          qualifications: response.data.user.qualifications,
+        };
+
+        // Store JWT token
+        if (response.data.token) {
+          localStorage.setItem('authToken', response.data.token);
+          axios.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
+        }
+
+        setUser(user);
+        localStorage.setItem('medicalPlatformUser', JSON.stringify(user));
+        return true;
+      }
+      return false;
     } catch (error) {
-      console.error('Login failed:', error);
+      console.error('Login failed:', error.response?.data?.message || error.message);
       return false;
     } finally {
       setIsLoading(false);
@@ -83,21 +100,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const register = async (userData: RegisterData): Promise<boolean> => {
     setIsLoading(true);
     try {
-      // Simulate API call - replace with actual backend integration
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const newUser: User = {
-        id: Date.now().toString(),
-        name: userData.name,
-        email: userData.email,
-        role: userData.role,
-      };
+      // Make API call to backend
+      const response = await axios.post('/api/auth/register', userData);
 
-      setUser(newUser);
-      localStorage.setItem('medicalPlatformUser', JSON.stringify(newUser));
-      return true;
+      if (response.data && response.data.user) {
+        const user: User = {
+          id: response.data.user._id,
+          name: response.data.user.name,
+          email: response.data.user.email,
+          role: response.data.user.role,
+        };
+
+        setUser(user);
+        localStorage.setItem('medicalPlatformUser', JSON.stringify(user));
+        return true;
+      }
+      return false;
     } catch (error) {
-      console.error('Registration failed:', error);
+      console.error('Registration failed:', error.response?.data?.message || error.message);
       return false;
     } finally {
       setIsLoading(false);
@@ -107,6 +127,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = () => {
     setUser(null);
     localStorage.removeItem('medicalPlatformUser');
+    localStorage.removeItem('authToken');
+    delete axios.defaults.headers.common['Authorization'];
   };
 
   const updateProfile = (userData: Partial<User>) => {
@@ -116,6 +138,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem('medicalPlatformUser', JSON.stringify(updatedUser));
     }
   };
+
+  // Set up axios interceptor for token
+  useEffect(() => {
+    const token = localStorage.getItem('authToken');
+    if (token) {
+      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    }
+  }, []);
 
   const value = {
     user,
