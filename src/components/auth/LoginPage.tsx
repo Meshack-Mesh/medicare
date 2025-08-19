@@ -9,9 +9,8 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, Mail, Lock, Heart } from 'lucide-react';
 
 const LoginPage = () => {
-  // Hardcoded credentials for testing
-  const [email, setEmail] = useState('doctor@test.com');
-  const [password, setPassword] = useState('password123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuth();
   const { toast } = useToast();
@@ -87,9 +86,6 @@ const LoginPage = () => {
                     required
                   />
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Test credentials: doctor@test.com / password123
-                </p>
               </div>
               
               <div className="space-y-2">

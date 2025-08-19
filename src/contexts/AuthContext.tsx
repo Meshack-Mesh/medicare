@@ -1,9 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import axios from 'axios';
-
-// Configure axios base URL
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-axios.defaults.baseURL = API_BASE_URL;
+import { supabase } from '@/integrations/supabase/client';
+import { User as SupabaseUser, Session } from '@supabase/supabase-js';
 
 export interface User {
   id: string;
@@ -21,6 +18,7 @@ export interface User {
 
 interface AuthContextType {
   user: User | null;
+  session: Session | null;
   login: (email: string, password: string) => Promise<boolean>;
   register: (userData: RegisterData) => Promise<boolean>;
   logout: () => void;
@@ -47,50 +45,90 @@ export const useAuth = () => {
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check for stored user data on app load
-    const storedUser = localStorage.getItem('medicalPlatformUser');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
-    setIsLoading(false);
+    // Set up auth state listener FIRST
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        setSession(session);
+        if (session?.user) {
+          // Fetch user profile data
+          const profile = await fetchUserProfile(session.user.id);
+          setUser(profile);
+        } else {
+          setUser(null);
+        }
+        setIsLoading(false);
+      }
+    );
+
+    // THEN check for existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session?.user) {
+        fetchUserProfile(session.user.id).then(setUser);
+      }
+      setIsLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
+
+  const fetchUserProfile = async (userId: string): Promise<User | null> => {
+    try {
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      if (error || !profile) {
+        console.error('Error fetching profile:', error);
+        return null;
+      }
+
+      return {
+        id: profile.user_id,
+        name: profile.name,
+        email: '', // We'll get this from the auth user
+        role: profile.role,
+        age: profile.age,
+        gender: profile.gender,
+        specialization: profile.specialization,
+        qualifications: profile.qualifications,
+        medicalHistory: profile.medical_history,
+        profilePicture: profile.profile_picture,
+        availability: profile.availability,
+      };
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+      return null;
+    }
+  };
 
   const login = async (email: string, password: string): Promise<boolean> => {
     setIsLoading(true);
     try {
-      // Make API call to backend
-      const response = await axios.post('/api/auth/login', {
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
-        role: email === 'doctor@test.com' ? 'doctor' : 'patient' // Determine role based on email for now
       });
 
-      if (response.data && response.data.user) {
-        const user: User = {
-          id: response.data.user._id,
-          name: response.data.user.name,
-          email: response.data.user.email,
-          role: response.data.user.role,
-          specialization: response.data.user.specialization,
-          qualifications: response.data.user.qualifications,
-        };
+      if (error) {
+        console.error('Login error:', error.message);
+        return false;
+      }
 
-        // Store JWT token
-        if (response.data.token) {
-          localStorage.setItem('authToken', response.data.token);
-          axios.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
-        }
-
-        setUser(user);
-        localStorage.setItem('medicalPlatformUser', JSON.stringify(user));
+      if (data.user) {
+        // Profile will be fetched automatically by the auth state change listener
         return true;
       }
+
       return false;
     } catch (error) {
-      console.error('Login failed:', error.response?.data?.message || error.message);
+      console.error('Login failed:', error);
       return false;
     } finally {
       setIsLoading(false);
@@ -100,55 +138,75 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const register = async (userData: RegisterData): Promise<boolean> => {
     setIsLoading(true);
     try {
-      // Make API call to backend
-      const response = await axios.post('/api/auth/register', userData);
+      const redirectUrl = `${window.location.origin}/`;
+      
+      const { data, error } = await supabase.auth.signUp({
+        email: userData.email,
+        password: userData.password,
+        options: {
+          emailRedirectTo: redirectUrl,
+          data: {
+            name: userData.name,
+            role: userData.role,
+          }
+        }
+      });
 
-      if (response.data && response.data.user) {
-        const user: User = {
-          id: response.data.user._id,
-          name: response.data.user.name,
-          email: response.data.user.email,
-          role: response.data.user.role,
-        };
+      if (error) {
+        console.error('Registration error:', error.message);
+        return false;
+      }
 
-        setUser(user);
-        localStorage.setItem('medicalPlatformUser', JSON.stringify(user));
+      if (data.user) {
+        // Profile will be created automatically by the trigger
         return true;
       }
+
       return false;
     } catch (error) {
-      console.error('Registration failed:', error.response?.data?.message || error.message);
+      console.error('Registration failed:', error);
       return false;
     } finally {
       setIsLoading(false);
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    await supabase.auth.signOut();
     setUser(null);
-    localStorage.removeItem('medicalPlatformUser');
-    localStorage.removeItem('authToken');
-    delete axios.defaults.headers.common['Authorization'];
+    setSession(null);
   };
 
-  const updateProfile = (userData: Partial<User>) => {
-    if (user) {
-      const updatedUser = { ...user, ...userData };
-      setUser(updatedUser);
-      localStorage.setItem('medicalPlatformUser', JSON.stringify(updatedUser));
+  const updateProfile = async (userData: Partial<User>) => {
+    if (user && session?.user) {
+      try {
+        const { error } = await supabase
+          .from('profiles')
+          .update({
+            name: userData.name,
+            age: userData.age,
+            gender: userData.gender,
+            specialization: userData.specialization,
+            qualifications: userData.qualifications,
+            medical_history: userData.medicalHistory,
+            profile_picture: userData.profilePicture,
+            availability: userData.availability,
+          })
+          .eq('user_id', session.user.id);
+
+        if (!error) {
+          const updatedUser = { ...user, ...userData };
+          setUser(updatedUser);
+        }
+      } catch (error) {
+        console.error('Error updating profile:', error);
+      }
     }
   };
-
-  // Set up axios interceptor for token
-  useEffect(() => {
-    const token = localStorage.getItem('authToken');
-    if (token) {
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    }
-  }, []);
 
   const value = {
     user,
+    session,
     login,
     register,
     logout,
